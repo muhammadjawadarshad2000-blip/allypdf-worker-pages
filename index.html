@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+
+  <title>Allypdf - Free Online PDF & Image Tools | Merge, Split, Convert</title>
+  <meta name="description"
+    content="Free online PDF tools to merge, split, convert, and edit PDF files. Convert images between formats, compress files, and manipulate documents with our easy-to-use tools.">
+  <meta name="keywords"
+    content="PDF tools, Merge PDF, split PDF, combine PDF, extract PDF, compress PDF, convert PDF, delete, organize PDF, rotate, PDF to JPG, JPG to PDF, PDF to PNG, PNG to PDF, compress Image">
+  <link rel="canonical" href="https://allypdf.com" />
+
+  <link rel="icon" type="image/svg+xml" href="/logo.svg" fetchpriority="low" />
+  <link rel="icon" type="image/png" href="/logo.png" fetchpriority="low" />
+  <link rel="icon" type="image/png" href="/favicon.icon.png" fetchpriority="low" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <!-- Preload critical resources -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap"
+    rel="stylesheet">
+  <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
+
+  <!-- Critical CSS for initial loading -->
+  <style>
+    /* Critical above-the-fold styles */
+    body {
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      margin: 0;
+      padding: 0;
+    }
+
+    /* Prevent layout shifts */
+    /* #root {
+      min-height: 100vh;
+    } */
+
+    /* Optimize image rendering */
+    img {
+      content-visibility: auto;
+    }
+
+    @keyframes rotateConic {
+      to {
+        --conic-rotation: 360deg;
+      }
+    }
+
+    .conic-gradient-rotate {
+      background: conic-gradient(from var(--conic-rotation, 0deg),
+          oklch(44.3% 0.11 240.79),
+          oklch(28.2% 0.091 267.935));
+      animation: rotateConic 2s linear infinite;
+    }
+
+    @property --conic-rotation {
+      syntax: '<angle>';
+      inherits: false;
+      initial-value: 0deg;
+    }
+  </style>
+
+  <!-- Fallback for no-JS -->
+  <noscript>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap">
+  </noscript>
+</head>
+
+<body>
+  <div id="root">
+  </div>
+
+  <!-- <script async src="https://www.googletagmanager.com/gtag/js?id=G-JS2TSSY2P2"></script> -->
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag() { dataLayer.push(arguments); }
+    gtag('js', new Date());
+    gtag('config', 'G-JS2TSSY2P2');
+  </script>
+
+  <script type="module" src="/src/main.jsx" defer></script>
+</body>
+
+</html>
