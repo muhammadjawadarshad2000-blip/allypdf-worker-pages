@@ -53,7 +53,6 @@ const AdminBlog = () => {
       if (search) params.append('search', search);
 
       const res = await blogApi.getAllAdmin(params);
-      console.log(res.data.data)
       setPosts(res.data?.data || []);
       setPagination({ 
         currentPage: page, 
@@ -93,7 +92,6 @@ const AdminBlog = () => {
     try {
       const res = await blogApi.getByIdAdmin(id);
       const post = res.data?.data;
-      console.log("post", post)
       if (post) {
         setEditingPost(post);
         setFormData({
@@ -245,7 +243,7 @@ const AdminBlog = () => {
                       const pct = Math.max((cat.count / max) * 100, 5);
                       return (
                         <div key={cat.id} className="flex items-center gap-3">
-                          <span className="text-gray-300 text-sm w-24 shrink-0 capitalize">{cat.id.replace('-', ' ')}</span>
+                          <span className="text-gray-300 text-sm w-24 shrink-0 capitalize">{cat.id}</span>
                           <div className="flex-1 bg-sky-900 rounded-full h-3">
                             <div className="bg-teal-400 h-3 rounded-full transition-all" style={{ width: `${pct}%` }} />
                           </div>

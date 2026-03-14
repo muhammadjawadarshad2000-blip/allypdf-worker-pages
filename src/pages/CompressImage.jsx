@@ -9,18 +9,31 @@ import {
   Settings,
   Minimize2 as Compress,
 } from "lucide-react";
-import fileApi from "../api/fileApi";
-import { downloadImage, getFileSize, generateImagePreview, validateImageForCompression } from "../utils/pdfProcessor";
+import {
+  downloadImage,
+  downloadImagesAsZip,
+  getFileSize,
+  generateImagePreview,
+  validateImage,
+  compressImageClient,
+} from "../utils";
 import { incrementUsage, isUsageLimitReached } from "../store/slices/usageSlice";
 import ErrorMessage from "../components/ErrorMessage";
 import FAQSection from "../components/FAQSection";
 import HowToSection from "../components/HowToSection";
 import ProcessingOverlay from "../components/ProcessingOverlay";
 import WhyChooseSection from "../components/WhyChooseSection";
-import { ActionButton, ChangeButton, RemoveButton, SelectButton, XDeleteButton } from "../components/Buttons";
+import {
+  ActionButton,
+  ChangeButton,
+  RemoveButton,
+  SelectButton,
+  XDeleteButton,
+} from "../components/Buttons";
 import toolCTA from "/tools-cta/compress-image.png";
 import UploadProgressBar from "../components/UploadProgressBar";
 import ResultSection from "../components/ResultSection";
+import ToolHeader from "../components/ToolHeader";
 
 export default function CompressImage() {
   const [files, setFiles] = useState([]);
@@ -31,41 +44,57 @@ export default function CompressImage() {
   const [error, setError] = useState("");
   const [dragActive, setDragActive] = useState(false);
   const [compressionLevel, setCompressionLevel] = useState(80);
+  const [hasAutoDownloaded, setHasAutoDownloaded] = useState(false);
 
   const fileInputRef = useRef(null);
   const dropZoneRef = useRef(null);
   const inputKey = useRef(Date.now());
 
   const dispatch = useDispatch();
-  const isCompressLimitReached = useSelector(isUsageLimitReached("compressImage"));
+  const isCompressLimitReached = useSelector(
+    isUsageLimitReached("compressImage")
+  );
 
-  const generateFileId = () => `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-
-  const getTotalFileSize = () => files.reduce((total, file) => total + file.fileSize, 0);
+  const generateFileId = () =>
+    `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
   const getCompressionSavings = () => {
-    if (compressedFiles.length === 0) return { saved: 0, percentage: 0, originalTotal: 0, compressedTotal: 0 };
-    const originalTotal = compressedFiles.reduce((t, f) => t + f.originalSize, 0);
-    const compressedTotal = compressedFiles.reduce((t, f) => t + f.compressedSize, 0);
+    if (compressedFiles.length === 0)
+      return { saved: 0, percentage: 0, originalTotal: 0, compressedTotal: 0 };
+
+    const originalTotal = compressedFiles.reduce(
+      (t, f) => t + (f.originalSize || 0),
+      0
+    );
+    const compressedTotal = compressedFiles.reduce(
+      (t, f) => t + (f.compressedSize || 0),
+      0
+    );
+
     const saved = originalTotal - compressedTotal;
-    const percentage = originalTotal > 0 ? ((saved / originalTotal) * 100).toFixed(1) : 0;
+    const percentage =
+      originalTotal > 0 ? ((saved / originalTotal) * 100).toFixed(1) : 0;
+
     return { saved, percentage, originalTotal, compressedTotal };
   };
 
   const cleanupAllFiles = () => {
-    files.forEach(f => f.previewUrl && URL.revokeObjectURL(f.previewUrl));
-    compressedFiles.forEach(f => f.previewUrl && URL.revokeObjectURL(f.previewUrl));
+    files.forEach((f) => f.previewUrl && URL.revokeObjectURL(f.previewUrl));
+    compressedFiles.forEach(
+      (f) => f.previewUrl && URL.revokeObjectURL(f.previewUrl)
+    );
     setFiles([]);
     setCompressedFiles([]);
     setUploadProgress(0);
     setConversionProgress(0);
     setError("");
+    setHasAutoDownloaded(false);
   };
 
   const cleanupFile = (fileId) => {
-    const file = files.find(f => f.id === fileId);
+    const file = files.find((f) => f.id === fileId);
     if (file?.previewUrl) URL.revokeObjectURL(file.previewUrl);
-    setFiles(prev => prev.filter(f => f.id !== fileId));
+    setFiles((prev) => prev.filter((f) => f.id !== fileId));
   };
 
   const resetFileInput = () => {
@@ -96,8 +125,8 @@ export default function CompressImage() {
 
     // Ignore drops coming from internal drag (if any)
     try {
-      const internal = dt.getData('application/x-merge-internal');
-      if (internal === '1') {
+      const internal = dt.getData("application/x-merge-internal");
+      if (internal === "1") {
         return;
       }
     } catch {
@@ -105,13 +134,15 @@ export default function CompressImage() {
     }
 
     if (isCompressLimitReached) {
-      setError("Daily image compression limit reached. Please log in for unlimited usage.");
+      setError(
+        "Daily image compression limit reached. Please log in for unlimited usage."
+      );
       return;
     }
 
     const hasFiles =
       (dt.files && dt.files.length > 0) ||
-      (dt.items && Array.from(dt.items).some(item => item.kind === 'file'));
+      (dt.items && Array.from(dt.items).some((item) => item.kind === "file"));
 
     if (!hasFiles) {
       // likely text/HTML drop – ignore
@@ -129,7 +160,7 @@ export default function CompressImage() {
     const errors = [];
 
     for (const file of newFiles) {
-      const err = validateImageForCompression(file);
+      const err = validateImage(file);
       if (err) errors.push(`${file.name}: ${err}`);
       else validFiles.push(file);
     }
@@ -142,6 +173,7 @@ export default function CompressImage() {
     setError("");
     setUploadProgress(10);
     setCompressedFiles([]);
+    setHasAutoDownloaded(false);
 
     const processedFiles = [];
     for (let i = 0; i < validFiles.length; i++) {
@@ -152,7 +184,12 @@ export default function CompressImage() {
       try {
         const previewData = await generateImagePreview(file);
         const fileId = generateFileId();
-        processedFiles.push({ id: fileId, file, ...previewData });
+        processedFiles.push({
+          id: fileId,
+          file,
+          originalSize: file.size,
+          ...previewData,
+        });
       } catch (err) {
         errors.push(`Failed to process ${file.name}: ${err.message}`);
       }
@@ -161,7 +198,7 @@ export default function CompressImage() {
     if (errors.length > 0) setError(errors.join("\n"));
 
     if (processedFiles.length > 0) {
-      setFiles(prev => [...prev, ...processedFiles]);
+      setFiles((prev) => [...prev, ...processedFiles]);
     }
 
     setUploadProgress(100);
@@ -173,7 +210,9 @@ export default function CompressImage() {
     if (selectedFiles.length === 0) return;
 
     if (isCompressLimitReached) {
-      setError("Daily image compression limit reached. Please log in for unlimited usage.");
+      setError(
+        "Daily image compression limit reached. Please log in for unlimited usage."
+      );
       resetFileInput();
       return;
     }
@@ -182,83 +221,107 @@ export default function CompressImage() {
     resetFileInput();
   };
 
+  const buildCompressedFileName = (originalName) => {
+    const dot = originalName.lastIndexOf(".");
+    const ext = dot !== -1 ? originalName.substring(dot) : "";
+    const base = dot !== -1 ? originalName.substring(0, dot) : originalName;
+    return `${base}_compressed${ext || ""}`;
+  };
+
   const handleCompress = async () => {
     window.scrollTo(0, 0);
     if (files.length === 0) return;
 
     if (isCompressLimitReached) {
-      setError("Daily image compression limit reached. Please log in for unlimited usage.");
+      setError("Daily limit reached. Please try again tomorrow.");
       return;
     }
 
     setIsProcessing(true);
-    setConversionProgress(0);
     setError("");
+    setUploadProgress(0);
+    setConversionProgress(0);
+    setCompressedFiles([]);
+    setHasAutoDownloaded(false);
 
     try {
-      const formData = new FormData();
-      files.forEach(fileData => formData.append("images", fileData.file));
-      formData.append("quality", compressionLevel);
+      const compressedResults = [];
 
-      const progressInterval = setInterval(() => {
-        setConversionProgress(prev => {
-          if (prev >= 90) {
-            clearInterval(progressInterval);
-            return 90;
-          }
-          return prev + 5;
+      for (let i = 0; i < files.length; i++) {
+        const fileObj = files[i];
+
+        setConversionProgress(Math.round((i / files.length) * 100));
+
+        const result = await compressImageClient(fileObj.file, {
+          quality: compressionLevel / 100,
         });
-      }, 200);
 
-      const res = await fileApi.post("/images/compress-image", formData, { responseType: "blob" });
+        const blob = result?.blob;
 
-      clearInterval(progressInterval);
-      setConversionProgress(100);
+        if (!(blob instanceof Blob) || blob.size === 0) {
+          throw new Error(
+            `Compression returned empty output for ${fileObj.file?.name || "file"}`
+          );
+        }
 
-      const compressedBlob = res.data;
-      const compressedResults = files.map(fileData => ({
-        id: fileData.id,
-        originalName: fileData.fileName,
-        originalSize: fileData.fileSize,
-        compressedSize: Math.round(compressedBlob.size / files.length),
-        blob: compressedBlob,
-        previewUrl: fileData.previewUrl,
-        width: fileData.width,
-        height: fileData.height,
-      }));
+        const previewUrl = URL.createObjectURL(blob);
 
-      if (files.length === 1) {
-        compressedResults[0].compressedSize = compressedBlob.size;
+        compressedResults.push({
+          id: fileObj.id,
+
+          // for UI + summary
+          originalName: fileObj.file.name,
+          originalSize: fileObj.file.size,
+          compressedSize: blob.size,
+
+          // for download helpers
+          blob,
+          fileName: buildCompressedFileName(fileObj.file.name),
+
+          // preview
+          previewUrl,
+        });
       }
 
       setCompressedFiles(compressedResults);
+      setConversionProgress(100);
       dispatch(incrementUsage("compressImage"));
-
-      const fileName =
-        files.length === 1
-          ? files[0].fileName.replace(/\.[^/.]+$/, "_compressed" + files[0].file.name.substring(files[0].file.name.lastIndexOf('.')))
-          : "allypdf_compressed-images.zip";
-      downloadImage(compressedBlob, fileName);
-
-      setTimeout(() => {
-        setConversionProgress(0);
-        setIsProcessing(false);
-      }, 1000);
     } catch (err) {
-      console.error(err);
-      setError(err.response?.data?.message || "Compression failed");
+      console.error("Compression failed:", err);
+      setError(err?.message || "Failed to compress images. Please try again.");
       setConversionProgress(0);
+    } finally {
       setIsProcessing(false);
+    }
+  };
+
+  const handleDownloadOne = (file) => {
+    if (!file?.blob) return;
+    downloadImage(file.blob, file.fileName || "compressed-image");
+  };
+
+  const handleDownloadAll = async () => {
+    if (compressedFiles.length === 0) return;
+
+    // downloadImagesAsZip expects: [{ blob, fileName }]
+    const zipData = compressedFiles.map((f) => ({
+      blob: f.blob,
+      fileName: f.fileName || f.originalName || "compressed-image",
+      pageNumber: 1,
+    }));
+
+    try {
+      await downloadImagesAsZip(zipData, "allypdf_compressed-images");
+    } catch (e) {
+      console.error("ZIP download failed:", e);
+      setError("Failed to create ZIP. Please try again.");
     }
   };
 
   const handleDownload = () => {
     if (compressedFiles.length === 0) return;
-    const file = compressedFiles[0];
-    const fileName = files.length === 1
-      ? files[0].fileName.replace(/\.[^/.]+$/, "_compressed" + files[0].file.name.substring(files[0].file.name.lastIndexOf('.')))
-      : "allypdf_compressed-images.zip";
-    downloadImage(file.blob, fileName);
+    if (compressedFiles.length === 1) handleDownloadOne(compressedFiles[0]);
+    else handleDownloadAll();
   };
 
   const handleRemoveFile = (fileId) => cleanupFile(fileId);
@@ -270,39 +333,69 @@ export default function CompressImage() {
 
   const handleAddMoreFiles = () => {
     if (isCompressLimitReached) {
-      setError("Daily image compression limit reached. Please log in for unlimited usage.");
+      setError(
+        "Daily image compression limit reached. Please log in for unlimited usage."
+      );
       return;
     }
     fileInputRef.current?.click();
   };
 
+  // ✅ Auto-download (same pattern as ResizeImage.jsx)
+  useEffect(() => {
+    if (
+      compressedFiles.length > 0 &&
+      !isProcessing &&
+      !hasAutoDownloaded
+    ) {
+      setHasAutoDownloaded(true);
+
+      const autoDownload = () => {
+        if (compressedFiles.length === 1) {
+          handleDownloadOne(compressedFiles[0]);
+        } else {
+          handleDownloadAll();
+        }
+      };
+
+      return autoDownload;
+    }
+  }, [compressedFiles, isProcessing, hasAutoDownloaded]);
+
   useEffect(() => {
     return () => {
-      files.forEach(f => f.previewUrl && URL.revokeObjectURL(f.previewUrl));
-      compressedFiles.forEach(f => f.previewUrl && URL.revokeObjectURL(f.previewUrl));
+      files.forEach((f) => f.previewUrl && URL.revokeObjectURL(f.previewUrl));
+      compressedFiles.forEach(
+        (f) => f.previewUrl && URL.revokeObjectURL(f.previewUrl)
+      );
     };
   }, [files, compressedFiles]);
 
   const faqItems = [
     {
       question: "What image formats can I compress?",
-      answer: "You can compress JPEG, PNG, WebP, GIF, BMP, and TIFF files with our tool."
+      answer:
+        "You can compress JPEG, PNG, WebP, GIF, BMP, and TIFF files with our tool.",
     },
     {
       question: "Will compression affect image quality?",
-      answer: "Our tool uses advanced algorithms to reduce file size while maintaining the best possible quality based on your selected compression level."
+      answer:
+        "Our tool uses advanced algorithms to reduce file size while maintaining the best possible quality based on your selected compression level.",
     },
     {
       question: "Can I compress multiple images at once?",
-      answer: "Yes! You can upload and compress multiple images in a single batch. They'll be downloaded as a ZIP file."
+      answer:
+        "Yes! You can upload and compress multiple images in a single batch. They'll be downloaded as a ZIP file.",
     },
     {
       question: "How much file size can I save?",
-      answer: "Typically, you can save 50-80% of the original size depending on format, quality settings, and image content."
+      answer:
+        "Typically, you can save 50-80% of the original size depending on format, quality settings, and image content.",
     },
     {
       question: "Is there a file size limitation?",
-      answer: "No, there are no file size limitations. You can compress images of any size for free."
+      answer:
+        "No, there are no file size limitations. You can compress images of any size for free.",
     },
   ];
 
@@ -311,33 +404,39 @@ export default function CompressImage() {
     {
       icon: Shield,
       title: "Ultra-Secure Processing",
-      description: "Your images never leave your browser. All compression happens locally on your device, ensuring complete privacy and security.",
+      description:
+        "Your images never leave your browser. All compression happens locally on your device, ensuring complete privacy and security.",
     },
     {
       icon: Gift,
       title: "Completely Free Forever",
-      description: "No hidden fees, no subscriptions, no watermarks. Our image compressor is 100% free with no limitations. Use it as much as you want without ever paying.",
+      description:
+        "No hidden fees, no subscriptions, no watermarks. Our image compressor is 100% free with no limitations. Use it as much as you want without ever paying.",
     },
     {
       icon: Settings,
       title: "Adjustable Compression",
-      description: "Control the compression level with a simple slider. Balance between file size and image quality according to your specific needs.",
+      description:
+        "Control the compression level with a simple slider. Balance between file size and image quality according to your specific needs.",
     },
     {
       icon: Zap,
       title: "Instant Browser-Based Operation",
-      description: "Zero installation required—works directly in your browser. No software downloads, no registration, and no waiting times. Start compressing images in seconds.",
+      description:
+        "Zero installation required—works directly in your browser. No software downloads, no registration, and no waiting times. Start compressing images in seconds.",
     },
     {
       icon: Compress,
       title: "Batch Processing",
-      description: "Compress multiple images at once. Our tool supports batch processing, allowing you to reduce the file size of multiple images in one go.",
+      description:
+        "Compress multiple images at once. Our tool supports batch processing, allowing you to reduce the file size of multiple images in one go.",
     },
     {
       icon: Image,
       title: "Wide Format Support",
-      description: "Supports all major image formats including JPEG, PNG, WebP, and GIF. No need to convert images before compressing.",
-    }
+      description:
+        "Supports all major image formats including JPEG, PNG, WebP, and GIF. No need to convert images before compressing.",
+    },
   ];
 
   const iconColorClasses = [
@@ -346,17 +445,17 @@ export default function CompressImage() {
     "bg-cyan-500",
     "bg-violet-500",
     "bg-teal-500",
-    "bg-purple-500"
+    "bg-purple-500",
   ];
 
   const savings = getCompressionSavings();
 
   return (
     <div className="relative min-h-screen">
-      {/* Main Content Area with Gradient Background */}
+      {/* Main Content Area with linear Background */}
       <div
         ref={dropZoneRef}
-        className="px-3 md:px-4 py-3 md:py-4 transition-all duration-300 bg-gradient-to-r from-[#014b80] to-[#031f33]"
+        className="px-3 md:px-4 py-3 md:py-4 transition-all duration-300 bg-linear-to-r from-[#014b80] to-[#031f33]"
         onDragEnter={handleDrag}
         onDragLeave={handleDrag}
         onDragOver={handleDrag}
@@ -364,9 +463,15 @@ export default function CompressImage() {
       >
         <div className="max-w-7xl mx-auto">
           {/* Advertisement Space */}
-          <div className="mb-8 mx-auto h-[90px] w-full ad" />
+          <div className="mb-8 mx-auto h-22.5 w-full ad"></div>
 
-          <div className={`${files.length === 0 && !compressedFiles.length ? "flex flex-col justify-center" : ""}`}>
+          <div
+            className={`${
+              files.length === 0 && !compressedFiles.length
+                ? "flex flex-col justify-center"
+                : ""
+            }`}
+          >
             {/* Error Messages */}
             <ErrorMessage message={error} />
 
@@ -374,14 +479,14 @@ export default function CompressImage() {
             <motion.div
               initial={{ opacity: 0, y: -20 }}
               animate={{ opacity: 1, y: 0 }}
-              className={`mb-6 sm:mb-8 text-center ${files.length === 0 && !compressedFiles.length ? "" : "hidden"}`}
+              className={`mb-6 sm:mb-8 text-center ${
+                files.length === 0 && !compressedFiles.length ? "" : "hidden"
+              }`}
             >
-              <h1 className="text-4xl md:text-5xl lg:text-6xl text-white pb-3 sm:pb-4 md:pb-5">
-                Compress Images
-              </h1>
-              <p className="text-white font-light text-2xl md:text-3xl mx-auto px-2">
-                Reduce image file size while maintaining quality
-              </p>
+              <ToolHeader
+                title="Compress Images"
+                description="Reduce image file size while maintaining quality"
+              />
             </motion.div>
 
             <input
@@ -408,11 +513,15 @@ export default function CompressImage() {
                         <div className="text-center w-full">
                           <p className="text-gray-100 mb-3 sm:mb-4 text-center text-sm sm:text-base">
                             {isCompressLimitReached
-                              ? 'Daily limit reached. Log in for unlimited usage'
-                              : 'Drop your images here or click to browse'}
+                              ? "Daily limit reached. Log in for unlimited usage"
+                              : "Drop your images here or click to browse"}
                           </p>
                           <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 justify-center items-center mb-6">
-                            <SelectButton isLimitReached={isCompressLimitReached} fileInputRef={fileInputRef} title="Select Image files" />
+                            <SelectButton
+                              isLimitReached={isCompressLimitReached}
+                              fileInputRef={fileInputRef}
+                              title="Select Image files"
+                            />
                           </div>
                           <p className="text-xs sm:text-sm text-gray-100 text-center px-2">
                             JPEG, PNG, WebP, GIF
@@ -436,9 +545,9 @@ export default function CompressImage() {
 
               {/* Selected Images Card */}
               {files.length > 0 && !compressedFiles.length && (
-                <div className="mb-4 sm:mb-6" >
+                <div className="mb-4 sm:mb-6">
                   <div className="bg-sky-800 rounded-xl shadow-lg overflow-hidden">
-                    <div className="bg-gradient-to-r from-sky-800 to-blue-950 px-3 sm:px-4 md:px-6 py-3 sm:py-4 border-b border-gray-200">
+                    <div className="bg-linear-to-r from-sky-800 to-blue-950 px-3 sm:px-4 md:px-6 py-3 sm:py-4 border-b border-gray-200">
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-0">
                         <div className="flex items-center gap-2 sm:gap-3">
                           <Image className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
@@ -446,12 +555,18 @@ export default function CompressImage() {
                             Selected Images
                           </h3>
                           <span className="text-xs sm:text-sm text-gray-100">
-                            • {files.length} file{files.length !== 1 ? 's' : ''}
+                            • {files.length} file{files.length !== 1 ? "s" : ""}
                           </span>
                         </div>
                         <div className="flex items-center gap-2 sm:gap-4 mt-2 sm:mt-0">
-                          <ChangeButton handleAddMoreFiles={handleAddMoreFiles} title="Add More" />
-                          <RemoveButton handleRemoveFile={handleStartOver} title="Clear All" />
+                          <ChangeButton
+                            handleAddMoreFiles={handleAddMoreFiles}
+                            title="Add More"
+                          />
+                          <RemoveButton
+                            handleRemoveFile={handleStartOver}
+                            title="Clear All"
+                          />
                         </div>
                       </div>
                     </div>
@@ -471,7 +586,10 @@ export default function CompressImage() {
                               whileHover={{ scale: 1.02 }}
                               className="relative bg-cyan-700 rounded-lg border border-sky-700 hover:border-sky-500/60 overflow-hidden max-w-60"
                             >
-                              <XDeleteButton handleRemove={() => handleRemoveFile(file.id)} title="Remove Image" />
+                              <XDeleteButton
+                                handleRemove={() => handleRemoveFile(file.id)}
+                                title="Remove Image"
+                              />
 
                               {/* Preview area */}
                               <div className="relative aspect-square bg-sky-900 flex items-center justify-center">
@@ -480,7 +598,7 @@ export default function CompressImage() {
                                     src={file.previewUrl}
                                     alt={file.fileName}
                                     className="max-w-full max-h-full object-contain m-auto"
-                                    style={{ maxWidth: '90%', maxHeight: '90%' }}
+                                    style={{ maxWidth: "90%", maxHeight: "90%" }}
                                     draggable={false}
                                     onDragStart={(e) => e.preventDefault()}
                                   />
@@ -525,7 +643,7 @@ export default function CompressImage() {
                   className="mb-6 sm:mb-8"
                 >
                   <div className="bg-sky-800 rounded-xl shadow-lg overflow-hidden">
-                    <div className="bg-gradient-to-r from-sky-800 to-blue-950 px-3 sm:px-4 md:px-6 py-3 sm:py-4 border-b border-gray-200">
+                    <div className="bg-linear-to-r from-sky-800 to-blue-950 px-3 sm:px-4 md:px-6 py-3 sm:py-4 border-b border-gray-200">
                       <div className="flex items-center gap-2 sm:gap-3">
                         <Settings className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
                         <h3 className="text-white text-md sm:text-lg">
@@ -550,7 +668,9 @@ export default function CompressImage() {
                             min="10"
                             max="100"
                             value={compressionLevel}
-                            onChange={(e) => setCompressionLevel(parseInt(e.target.value))}
+                            onChange={(e) =>
+                              setCompressionLevel(parseInt(e.target.value))
+                            }
                             className="w-full h-2 bg-sky-950 rounded-full cursor-pointer accent-sky-400 inset-ring-1 inset-ring-sky-500"
                           />
                           <div className="flex justify-between text-xs text-gray-100 mt-1">
@@ -563,8 +683,8 @@ export default function CompressImage() {
                             {compressionLevel < 50
                               ? "High compression - Significantly smaller files with some quality loss"
                               : compressionLevel < 80
-                                ? "Balanced compression - Good balance between size and quality"
-                                : "Low compression - Maximum quality with moderate size reduction"}
+                              ? "Balanced compression - Good balance between size and quality"
+                              : "Low compression - Maximum quality with moderate size reduction"}
                           </p>
                         </div>
                       </div>
@@ -579,56 +699,70 @@ export default function CompressImage() {
                   title="Compression Complete!"
                   subtitle={`• ${savings.percentage}% saved`}
                   onDownload={handleDownload}
-                  downloadButtonText={files.length === 1 ? "Download" : "Download All"}
+                  downloadButtonText={
+                    compressedFiles.length === 1 ? "Download" : "Download All"
+                  }
                   onStartOver={handleStartOver}
                   summaryTitle="Compression Summary"
                   summaryItems={[
                     {
                       value: getFileSize(savings.originalTotal),
                       label: "Original Size",
-                      valueColor: "white"
+                      valueColor: "white",
                     },
                     {
                       value: getFileSize(savings.compressedTotal),
                       label: "Compressed Size",
-                      valueColor: "teal-400"
+                      valueColor: "teal-400",
                     },
                     {
                       value: `${savings.percentage}%`,
                       label: "Reduction",
-                      valueColor: "yellow-400"
+                      valueColor: "yellow-400",
                     },
                     {
                       value: getFileSize(savings.saved),
                       label: "Space Saved",
-                      valueColor: "green-400"
+                      valueColor: "green-400",
                     },
-                  ]} />
+                  ]}
+                />
               )}
 
               {/* Compress Button */}
               {files.length > 0 && !compressedFiles.length && (
                 <ActionButton
-                  disabled={isProcessing || isCompressLimitReached || files.length === 0}
+                  disabled={
+                    isProcessing || isCompressLimitReached || files.length === 0
+                  }
                   handleAction={handleCompress}
-                  className={isProcessing || isCompressLimitReached || files.length === 0 ? "cursor-not-allowed" : "cursor-pointer"}
+                  className={
+                    isProcessing || isCompressLimitReached || files.length === 0
+                      ? "cursor-not-allowed"
+                      : "cursor-pointer"
+                  }
                   isProcessing={isProcessing}
                   process="Compressing..."
-                  title={`Compress ${files.length === 1 ? "Image" : "Images"}`} />
+                  title={`Compress ${
+                    files.length === 1 ? "Image" : "Images"
+                  }`}
+                />
               )}
 
               {/* Processing Overlay */}
               <ProcessingOverlay
                 isProcessing={isProcessing}
                 progress={conversionProgress}
-                title={`Compressing ${files.length} ${files.length === 1 ? "Image" : "Images"}`}
+                title={`Compressing ${files.length} ${
+                  files.length === 1 ? "Image" : "Images"
+                }`}
                 description="Optimizing your images..."
               />
             </div>
           </div>
 
           {/* Advertisement Space */}
-          <div className="my-8 mx-auto h-[90px] w-full ad" />
+          <div className="my-8 mx-auto h-22.5 w-full ad"></div>
         </div>
       </div>
 
@@ -645,7 +779,7 @@ export default function CompressImage() {
       />
 
       {/* How To Section */}
-      <div className="relative bg-white h-[1100px] lg:h-[650px] flex items-center justify-center">
+      <div className="relative bg-white h-275 lg:h-162.5 flex items-center justify-center">
         <HowToSection
           title="How To Compress Images Online for Free"
           stepOne="Upload Images"

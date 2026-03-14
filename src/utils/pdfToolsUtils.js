@@ -1,13 +1,11 @@
 const { PDFDocument, degrees } = await import('pdf-lib');
 const pdfjsLib = await import('pdfjs-dist');
-import JSZip from 'jszip';
 import {
   getPDFPassword,
   loadPDFDocument,
   convertPdfJsToPdfLib,
 } from "./index"
 
-// Configure PDF.js worker - Fixed URL (removed space)
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
 
 
@@ -708,3 +706,232 @@ export const convertPDFToImage = async (file, options = {}, imageFormat, passwor
     throw new Error(`Failed to convert PDF to PNG: ${error.message}`);
   }
 };
+
+export const applyPageEdits = async (file, edits = [], password = null) => {
+  try {
+    if (!file || !edits?.length) throw new Error("Missing PDF or crop data");
+
+    if (!edits || !Array.isArray(edits) || edits.length === 0) {
+      throw new Error('No edits provided');
+    }
+
+    const fileId = `${file.name}-${file.size}`;
+    const { pdfDoc, pdfjsDoc, encrypted } = await loadPDFDocument(file, fileId, password);
+
+    if (encrypted && pdfjsDoc) {
+      const convertedDoc = await convertPdfJsToPdfLib(pdfjsDoc);
+      const totalPages = convertedDoc.getPageCount();
+
+      for (const e of edits) {
+        if (
+          typeof e.sourcePage !== 'number' ||
+          e.sourcePage < 1 ||
+          e.sourcePage > totalPages ||
+          ![0, 90, 180, 270].includes(e.rotation || 0)
+        ) {
+          throw new Error(`Invalid edit entry: ${JSON.stringify(e)}`);
+        }
+      }
+
+      const outPdf = await PDFDocument.create();
+
+      for (let i = 0; i < edits.length; i++) {
+        const srcIndex = edits[i].sourcePage - 1;
+        const [copied] = await outPdf.copyPages(convertedDoc, [srcIndex]);
+        outPdf.addPage(copied);
+
+        const rotation = edits[i].rotation || 0;
+        if (rotation !== 0) {
+          const page = outPdf.getPage(outPdf.getPageCount() - 1);
+          page.setRotation(degrees(rotation % 360));
+        }
+      }
+
+      const outBytes = await outPdf.save();
+      await pdfjsDoc.destroy();
+      return new Blob([outBytes], { type: 'application/pdf' });
+    } else if (pdfDoc) {
+      const totalPages = pdfDoc.getPageCount();
+
+      for (const e of edits) {
+        if (
+          typeof e.sourcePage !== 'number' ||
+          e.sourcePage < 1 ||
+          e.sourcePage > totalPages ||
+          ![0, 90, 180, 270].includes(e.rotation || 0)
+        ) {
+          throw new Error(`Invalid edit entry: ${JSON.stringify(e)}`);
+        }
+      }
+
+      const outPdf = await PDFDocument.create();
+
+      for (let i = 0; i < edits.length; i++) {
+        const srcIndex = edits[i].sourcePage - 1;
+        const [copied] = await outPdf.copyPages(pdfDoc, [srcIndex]);
+        outPdf.addPage(copied);
+
+        const rotation = edits[i].rotation || 0;
+        if (rotation !== 0) {
+          const page = outPdf.getPage(outPdf.getPageCount() - 1);
+          page.setRotation(degrees(rotation % 360));
+        }
+      }
+
+      const outBytes = await outPdf.save();
+      return new Blob([outBytes], { type: 'application/pdf' });
+    } else {
+      throw new Error('Failed to load PDF for editing');
+    }
+  } catch (error) {
+    throw new Error(`Failed to apply page edits: ${error.message}`);
+  }
+};
+
+export const extractTextFromPDF = async (file, password = null) => {
+  const arrayBuffer = await file.arrayBuffer();
+  const fileId = `${file.name}-${file.size}`;
+
+  const pdf = await pdfjsLib.getDocument({
+    data: arrayBuffer,
+    password: password || getPDFPassword(fileId),
+    worker: null
+  }).promise;
+
+  const numPages = pdf.numPages;
+  let combinedText = "";
+
+  for (let pageNum = 1; pageNum <= numPages; pageNum++) {
+    const page = await pdf.getPage(pageNum);
+    const textContent = await page.getTextContent();
+    const strings = textContent.items.map((item) => item.str);
+    combinedText += strings.join(" ") + "\n";
+  }
+
+  let info = {};
+  let creationDate = null;
+  let modDate = null;
+
+  try {
+    const meta = await pdf.getMetadata();
+    info = meta?.info || {};
+    creationDate = info.CreationDate || meta?.metadata?.get("xmp:CreateDate") || null;
+    modDate = info.ModDate || meta?.metadata?.get("xmp:ModifyDate") || null;
+  } catch (e) {
+    // metadata optional
+  }
+
+  await pdf.destroy();
+
+  return {
+    text: combinedText,
+    numPages,
+    info,
+    creationDate,
+    modDate
+  }
+};
+
+export const extractEmbeddedImagesFromPDF = async (file, password = null) => {
+  const arrayBuffer = await file.arrayBuffer();
+  const loadingTask = pdfjsLib.getDocument({
+    data: arrayBuffer,
+    password: password,
+    stopAtErrors: false, // Prevents total failure on one bad image
+  });
+
+  const pdf = await loadingTask.promise;
+  const extractedImages = [];
+  let imageCounter = 1;
+
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+
+    // 1. Force PDF.js to parse the page content fully to populate caches
+    const operatorList = await page.getOperatorList();
+
+    // 2. Iterate through operators to find image keys
+    for (let j = 0; j < operatorList.fnArray.length; j++) {
+      const fn = operatorList.fnArray[j];
+
+      if (
+        fn === pdfjsLib.OPS.paintImageXObject ||
+        fn === pdfjsLib.OPS.paintInlineImageXObject ||
+        fn === pdfjsLib.OPS.paintImageMaskXObject // Added for logos/stamps
+      ) {
+        const imageKey = operatorList.argsArray[j][0];
+
+        try {
+          // 3. Try to get image from Page-specific objects first, then Common objects
+          let image = null;
+
+          // Use a wrapped promise to handle the callback-based .get()
+          image = await new Promise((resolve) => {
+            // First check page-specific objects
+            page.objs.get(imageKey, (img) => {
+              if (img) resolve(img);
+              else {
+                // If not found, check common objects (shared images/logos)
+                page.commonObjs.get(imageKey, (commonImg) => {
+                  resolve(commonImg);
+                });
+              }
+            });
+          });
+
+          if (image && (image.data || image.bitmap)) {
+            const blob = await convertToImageBlob(image);
+            extractedImages.push({
+              blob,
+              fileName: `img_p${i}_${imageCounter++}.png`,
+              pageNumber: i,
+            });
+          }
+        } catch (err) {
+          console.warn(`Skipping image key ${imageKey}:`, err);
+        }
+      }
+    }
+  }
+
+  return extractedImages;
+};
+
+async function convertToImageBlob(image) {
+  // Handle different data formats (Uint8ClampedArray vs ImageBitmap)
+  const width = image.width;
+  const height = image.height;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+
+  if (image.bitmap) {
+    // Some newer PDF.js versions return an ImageBitmap directly
+    ctx.drawImage(image.bitmap, 0, 0);
+  } else {
+    const imageData = ctx.createImageData(width, height);
+    const rawData = image.data;
+
+    // Determine if data is RGB or RGBA
+    // If RGB (3 bytes per pixel), convert to RGBA
+    if (rawData.length === width * height * 3) {
+      let j = 0;
+      for (let i = 0; i < rawData.length; i += 3) {
+        imageData.data[j++] = rawData[i];     // R
+        imageData.data[j++] = rawData[i + 1]; // G
+        imageData.data[j++] = rawData[i + 2]; // B
+        imageData.data[j++] = 255;            // A
+      }
+    } else {
+      // If already RGBA (4 bytes per pixel) or grayscale, copy directly
+      imageData.data.set(rawData);
+    }
+    ctx.putImageData(imageData, 0, 0);
+  }
+
+  return new Promise((resolve) => {
+    canvas.toBlob((blob) => resolve(blob), 'image/png');
+  });
+}

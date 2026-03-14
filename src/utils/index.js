@@ -24,16 +24,25 @@ import {
   rearrangePDFPages,
   cropPDF,
   convertImageToPDF,
-  convertPDFToImage
+  convertPDFToImage,
+  applyPageEdits,
+  extractTextFromPDF,
+  extractEmbeddedImagesFromPDF
 } from "./pdfToolsUtils";
 import {
   validateImage,
+  fileToDataURL,
+  getMimeType,
+  getExtension,
   generateImagePreview,
   downloadImage,
   downloadImagesAsZip
 } from "./commonImageUtils";
 import {
-  convertBetweenImages
+  convertBetweenImages,
+  resizeImageOnCanvas,
+  rotateImageOnCanvas,
+  compressImageClient
 } from "./imageToolsUtils"
 
 
@@ -62,10 +71,19 @@ export {
   cropPDF,
   convertImageToPDF,
   convertPDFToImage,
+  applyPageEdits,
+  extractTextFromPDF,
+  extractEmbeddedImagesFromPDF,
 
   validateImage,
+  fileToDataURL,
+  getMimeType,
+  getExtension,
   generateImagePreview,
   downloadImage,
   downloadImagesAsZip,
-  convertBetweenImages
+  convertBetweenImages,
+  resizeImageOnCanvas,
+  rotateImageOnCanvas,
+  compressImageClient
 }

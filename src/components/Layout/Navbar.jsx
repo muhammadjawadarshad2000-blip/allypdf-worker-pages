@@ -78,9 +78,7 @@ export default function Navbar() {
   const navigate = useNavigate();
   const dispatch = useDispatch();
 
-  // Dummy Redux state for layout testing. Replace with your actual state.
   const { isAuthenticated, user } = useSelector((state) => state.auth || { isAuthenticated: false });
-  console.log(user)
 
   // Close menus on route change
   useEffect(() => {

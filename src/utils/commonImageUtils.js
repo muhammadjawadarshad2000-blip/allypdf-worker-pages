@@ -13,6 +13,34 @@ export const validateImage = (file) => {
   return null;
 };
 
+export function fileToDataURL(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error(`Failed to read file: ${file.name}`));
+    reader.readAsDataURL(file);
+  });
+}
+
+export function getMimeType(fileName) {
+  const ext = fileName.split(".").pop().toLowerCase();
+  const map = {
+    jpg: "image/jpg",
+    jpeg: "image/jpeg",
+    png: "image/png",
+    webp: "image/webp",
+    gif: "image/gif",
+    bmp: "image/bmp",
+    avif: "image/avif",
+  };
+  return map[ext] || "image/png";
+}
+
+export function getExtension(fileName) {
+  const lastDot = fileName.lastIndexOf(".");
+  return lastDot !== -1 ? fileName.substring(lastDot) : ".png";
+}
+
 export const generateImagePreview = (file) => {
   return new Promise((resolve, reject) => {
     const img = new Image();

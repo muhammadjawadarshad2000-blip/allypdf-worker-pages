@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { Link, useSearchParams } from 'react-router-dom';
+import { data, Link, useSearchParams } from 'react-router-dom';
 import {
   Search, Calendar, Clock, Tag, ChevronLeft, ChevronRight,
   BookOpen, ArrowRight, Loader,
@@ -77,8 +77,7 @@ const Blog = () => {
       if (searchQuery) params.append('search', searchQuery);
 
       const res = await blogApi.getPublished(params);
-      console.log(res)
-      setPosts(res.data?.data?.posts || []);
+      setPosts(res?.data?.data.posts || []);
       setPagination(res.data?.data?.pagination || { currentPage: 1, totalPages: 1, totalItems: 0 });
     } catch (err) {
       console.error('Failed to fetch posts:', err);
@@ -168,11 +167,11 @@ const Blog = () => {
               className={`px-4 py-2 rounded-full text-sm font-medium transition cursor-pointer border ${!currentCategory ? 'bg-sky-500 text-white border-sky-500' : 'bg-white text-gray-900 border-sky-100 hover:border-sky-200 z-20'
                 }`}>All Posts</button>
             {categories.map((cat) => (
-              <button key={cat._id}
-                onClick={() => updateParams({ category: cat._id === currentCategory ? '' : cat._id })}
-                className={`px-4 py-2 rounded-full text-sm font-medium transition cursor-pointer border ${currentCategory === cat._id ? 'bg-sky-500 text-white border-sky-500' : 'bg-white text-gray-900 border-sky-100 hover:border-sky-200 z-20'
+              <button key={cat.id}
+                onClick={() => updateParams({ category: cat.id === currentCategory ? '' : cat.id })}
+                className={`px-4 py-2 rounded-full text-sm font-medium transition cursor-pointer border ${currentCategory === cat.id ? 'bg-sky-500 text-white border-sky-500' : 'bg-white text-gray-900 border-sky-100 hover:border-sky-200 z-20'
                   }`}>
-                {CATEGORY_LABELS[cat._id] || cat._id}
+                {CATEGORY_LABELS[cat.id] || cat.id}
               </button>
             ))}
           </div>
@@ -245,11 +244,11 @@ const Blog = () => {
                       </div>
                       <div className="p-5 flex flex-wrap gap-2">
                         {tags.map((t) => (
-                          <button key={t._id}
-                            onClick={() => updateParams({ tag: t._id === currentTag ? '' : t._id })}
-                            className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition cursor-pointer ${currentTag === t._id ? 'bg-sky-400 text-white border-sky-400' : 'bg-sky-900/50 text-gray-100 border-sky-700 hover:border-sky-500/50'
+                          <button key={t.id}
+                            onClick={() => updateParams({ tag: t.id === currentTag ? '' : t.id })}
+                            className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition cursor-pointer ${currentTag === t.id ? 'bg-sky-400 text-white border-sky-400' : 'bg-sky-900/50 text-gray-100 border-sky-700 hover:border-sky-500/50'
                               }`}>
-                            #{t._id}
+                            #{t.id}
                           </button>
                         ))}
                       </div>

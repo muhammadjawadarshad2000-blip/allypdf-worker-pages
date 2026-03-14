@@ -1,4 +1,4 @@
-const { PDFDocument, degrees } = await import('pdf-lib');
+const { PDFDocument } = await import('pdf-lib');
 const pdfjsLib = await import('pdfjs-dist');
 import JSZip from 'jszip';
 

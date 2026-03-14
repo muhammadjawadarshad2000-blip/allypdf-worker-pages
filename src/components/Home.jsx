@@ -53,7 +53,7 @@ export default function HomePage() {
   const filteredTools = activeTab === 'All' ? allTools : allTools.filter(t => t.category === activeTab);
 
   return (
-    <div className="min-h-screen bg-gradient-to-r from-[#014b80] to-[#031f33]">
+    <div className="min-h-screen bg-linear-to-r from-[#014b80] to-[#031f33]">
       {/* Hero Section */}
       <section className="overflow-hidden" style={{
         backgroundImage: `url(${heroBackground})`, backgroundSize: 'cover', backgroundPosition: "top"
@@ -73,7 +73,7 @@ export default function HomePage() {
               className="text-4xl sm:text-5xl lg:text-6xl font-light text-white tracking-tight leading-[1.05] mb-8"
             >
               Transform files at <br className="hidden sm:block" />
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-teal-400 via-cyan-400 to-blue-500">
+              <span className="text-transparent bg-clip-text bg-linear-to-r from-teal-400 via-cyan-400 to-blue-500">
                 the speed of thought.
               </span>
             </motion.h1>
@@ -172,7 +172,7 @@ export default function HomePage() {
       </section>
 
       {/* 3. BENTO GRID */}
-      <section className="py-34 bg-gradient-to-b from-sky-50 to-white">
+      <section className="py-34 bg-linear-to-b from-sky-50 to-white">
         <div className="mx-auto px-4">
           <div className="text-center mb-21">
             <h2 className="text-3xl md:text-5xl text-[#091d33] tracking-tight mb-4">Unmatched Capabilities</h2>
@@ -264,7 +264,7 @@ export default function HomePage() {
             className="text-4xl md:text-5xl text-white mb-6 tracking-tight"
           >
             Ready to streamline your <br />
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-teal-400 to-cyan-400">document workflow?</span>
+            <span className="text-transparent bg-clip-text bg-linear-to-r from-teal-400 to-cyan-400">document workflow?</span>
           </motion.h2>
 
           <motion.p 

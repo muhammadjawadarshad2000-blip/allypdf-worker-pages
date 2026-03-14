@@ -67,7 +67,6 @@ const BlogPost = () => {
         setLoading(true);
         setError('');
         const res = await blogApi.getPost(slug)
-        console.log(res.data)
         setPost(res.data?.data || null);
         setRelatedPosts(res.data?.data?.relatedPosts || []);
       } catch (err) {

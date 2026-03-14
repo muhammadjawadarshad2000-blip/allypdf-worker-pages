@@ -226,7 +226,7 @@ export default function PDFToImageConverter({
 
       setPdfFile({ file, pageCount });
 
-      const gen = await generatePDFPreview(file, 1, 0.4, imageFormat, password);
+      const gen = await generatePDFPreview(file, 1, 0.8, imageFormat, password);
       setPreview({
         id: uid(),
         pageNumber: 1,
