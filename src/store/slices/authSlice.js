@@ -12,7 +12,6 @@ export const registerUser = createAsyncThunk(
         fullName: formData.name,
         email: formData.email,
         password: formData.password,
-        role: "admin"
       });
       return data.data.user;
     } catch (err) {
