@@ -1,6 +1,6 @@
 import axiosClient from "./axiosClient";
 
-const API_BASE_URL = `${import.meta.env.VITE_API_URL}/converter` || "http://127.0.0.1:8787/api/v1/converter";
+const API_BASE_URL = `${import.meta.env.VITE_API_URL}/converter`;
 
 export const converterApi = {
   htmlToPdf: async (payload) => {

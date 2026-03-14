@@ -1,6 +1,6 @@
 import axiosClient from "./axiosClient";
 
-const API_BASE_URL = `${import.meta.env.VITE_API_URL}/contact` || "http://127.0.0.1:8787/api/v1/contact";
+const API_BASE_URL = `${import.meta.env.VITE_API_URL}/contact`;
 
 export const contactApi = {
   submit: async (formData) => {
