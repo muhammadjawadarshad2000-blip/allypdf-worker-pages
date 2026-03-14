@@ -1,0 +1,12 @@
+{
+  "name": "allypdf-pages",
+  "compatibility_date": "2026-03-14",
+  "pages_build_config": {
+    "build_command": "npm run build",
+    "destination_dir": "dist",
+    "root_dir": "/"
+  },
+  "vars": {
+    "VITE_API_URL": "https://api.yourdomain.com/api/v1" 
+  }
+}
